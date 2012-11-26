@@ -1,0 +1,152 @@
+<?php
+
+/**
+ * Constants
+ */
+
+// the tid of the restrction corresponding to this button
+define('BUTTON_RESTRICTION_TID', 6);
+define('BUTTON_DAY_SECONDS', 86400);
+
+/**
+ * Implements hook_permission().
+ */
+function button_permission() {
+  return array(
+    'administer button' =>  array(
+      'title' => t('Administer Button'),
+      'description' => t('Administer Button'),
+    ),
+    'use button' =>  array(
+      'title' => t('Use Button'),
+      'description' => t('Use Button'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_block_info().
+ */
+function button_block_info() {
+  $blocks = array();
+  $blocks['button'] = array(
+    'info' => t('Button'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function button_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'button':
+      if ( user_access('use button') ) {
+        $block['subject'] = t('Button Form');
+        $block['content'] = button_entry_display();
+      }
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function button_theme($existing, $type, $theme, $path) {
+  return array(
+    'button_eligible' => array(
+      'variables' => array('message_pre' => NULL, 'prize' => NULL, 'message_post' => NULL),
+      'template' => 'custom/templates/block_button_eligible',
+    ),
+    'button_ineligible' => array(
+      'variables' => array('message_pre' => NULL, 'prize' => NULL, 'message_post' => NULL),
+      'template' => 'custom/templates/block_button_ineligible',
+    )
+  );
+}
+
+/**
+ * Determines the content to be displayed in the button block
+ * based on a user's eligibility.
+ */
+function button_entry_display() {
+
+  $eligibility = eligibility_get(array('uid' => $GLOBALS['user']->uid, 'tid' => BUTTON_RESTRICTION_TID));
+
+  // dpm($eligibility);
+  if ( $eligibility->status != ELIGIBILITY_IS_ELIGIBLE ) {
+
+
+    $msg_pre = "Thanks for entering the Daily Prize Draw!";
+    $msg_pre .= "Come back tomorrow for another chance to WIN!*";
+    $msg_pre = t( $msg_pre );
+    $msg_post = t( "Enter Daily for your chance to WIN the $125,000 Grand Prize!!" );
+
+    // get prize for tomorrow
+    $start = scheduled_feed_day_start_timestamp(time() + BUTTON_DAY_SECONDS);
+    $prize = scheduled_feed_data_block($start, 'scheduled_feed_block_alt');
+
+    return theme('button_ineligible', array('message_pre' => $msg_pre, 'prize' => $prize, 'message_post' => $msg_post));
+  }
+  else {
+
+    // get prize for today
+    $start = scheduled_feed_day_start_timestamp();
+    $prize = scheduled_feed_data_block($start);
+
+    $form = drupal_render(drupal_get_form('button_entry_block_form'));
+
+    return theme('button_eligible', array('prize' => $prize, 'form' => $form));
+  }
+}
+
+/**
+ * Form: Button Number Combination Entry
+ */
+function button_entry_block_form($form, &$form_state) {
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Enter'),
+  );
+  $form['cta-suffix'] = array(
+    '#markup' => "<div class='submit-cta-suffix'>" . t("today's Daily Prize draw") . "</div>",
+  );
+  return $form;
+}
+
+/**
+ * Validation Callback : Button Combination Entry Form
+ */
+function button_entry_block_form_validate($form, &$form_state) {
+
+}
+
+/**
+ * Submit Callback : Button Combination Entry Form
+ */
+function button_entry_block_form_submit($form, &$form_state) {
+  // register eligibility event
+  $eligibility = eligibility_event_save($GLOBALS['user']->uid, BUTTON_RESTRICTION_TID);
+  if ( $eligibility ) {
+    dsm("Eligibility event was registered successfully");
+  }
+}
+
+/**
+ * Implements hook_eligibility_form_target()
+ */
+function button_eligibility_form_target() {
+  return array(
+    'button_entry_block_form' => array(
+      'variables' => array(
+        'uid' => $GLOBALS['user']->uid,
+        'tid' => BUTTON_RESTRICTION_TID,
+      ),
+      'message' => t("You have already entered today."),
+    ),
+  );
+}

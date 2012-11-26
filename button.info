@@ -1,0 +1,5 @@
+name = Button
+description = Provides an button that is displayed based on a user's eligibilty
+dependencies[] = eligibility
+dependencies[] = scheduled_feed
+core = 7.x
